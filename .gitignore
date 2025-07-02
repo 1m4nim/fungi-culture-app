@@ -54,4 +54,5 @@ path.fish.inc
 path.zsh.inc
 properties/
 
-*.py
+*.env
+
