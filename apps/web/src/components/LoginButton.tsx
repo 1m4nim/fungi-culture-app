@@ -1,3 +1,4 @@
+import React from 'react'
 import { signInWithPopup } from 'firebase/auth'
 import { auth, provider } from '../firebase'
 
@@ -7,6 +8,7 @@ export default function LoginButton() {
       await signInWithPopup(auth, provider)
     } catch (e) {
       alert('ログイン失敗')
+      console.error(e)
     }
   }
 

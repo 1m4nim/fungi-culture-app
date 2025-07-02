@@ -2,7 +2,11 @@ import { useState } from 'react'
 import { db, auth } from '../firebase'
 import { collection, addDoc, Timestamp } from 'firebase/firestore'
 
-export default function LogForm() {
+type Props = {
+  onAddSuccess?: () => void
+}
+
+export default function LogForm({ onAddSuccess }: Props) {
   const [note, setNote] = useState('')
 
   const addLog = async () => {
@@ -11,12 +15,16 @@ export default function LogForm() {
       await addDoc(collection(db, 'logs'), {
         uid: auth.currentUser.uid,
         note,
-        createdAt: Timestamp.now()
+        createdAt: Timestamp.now(),
       })
       alert('ログ追加成功')
       setNote('')
+
+      // ✅ 親から渡された onAddSuccess を呼ぶ
+      if (onAddSuccess) onAddSuccess()
     } catch (e) {
       alert('エラー発生')
+      console.error(e)
     }
   }
 

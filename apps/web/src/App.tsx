@@ -1,3 +1,4 @@
+import React, { useState } from 'react'
 import LoginButton from './components/LoginButton'
 import LogForm from './components/LogForm'
 import LogList from './components/LogList'
@@ -6,6 +7,11 @@ import { useAuthState } from 'react-firebase-hooks/auth'
 
 export default function App() {
   const [user] = useAuthState(auth)
+  const [reloadLogs, setReloadLogs] = useState(false)
+
+  const handleLogAdded = () => {
+    setReloadLogs((prev) => !prev)
+  }
 
   return (
     <div>
@@ -15,8 +21,8 @@ export default function App() {
       ) : (
         <>
           <p>こんにちは {user.displayName} さん</p>
-          <LogForm />
-          <LogList />
+          <LogForm onAddSuccess={handleLogAdded} />
+          <LogList reloadTrigger={reloadLogs} />
         </>
       )}
     </div>
