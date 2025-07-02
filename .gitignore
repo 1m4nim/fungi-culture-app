@@ -1,24 +1,57 @@
-# Logs
-logs
-*.log
+# Node関連
+node_modules/
+dist/
+build/
+
+# Firebase関連
+.firebaserc
+firebase-debug.log
+firebase.json
+firebase.json.backup
+
+# 環境変数
+.env
+.env.local
+.env.*
+!.env.example
+
+# Pythonファイルすべて
+*.py
+
+# TypeScript
+*.tsbuildinfo
+
+# Vite
+.vite
+
+# OS設定など
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Editor系
+*.swp
+*~
+
+# ログ
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# 一時ファイル
+*.log
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+# プロジェクト固有
+google-cloud-sdk/
+.install/
+lib/
+platform/
+rpm/
+path.bash.inc
+path.fish.inc
+path.zsh.inc
+properties/
+
+*.py
