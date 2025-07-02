@@ -56,3 +56,8 @@ properties/
 
 *.env
 
+nano .gitignore
+
+google-cloud-sdk/
+
+apps/web/fancustard9@gmail.com/google-cloud-sdk/
