@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import React, { useEffect, useState } from 'react'
 import { db, auth } from '../firebase'
 import {
@@ -10,6 +11,11 @@ import {
   doc,
   updateDoc,
 } from 'firebase/firestore'
+=======
+import { useEffect, useState } from 'react'
+import { db, auth } from '../firebase'
+import { collection, query, where, getDocs, orderBy } from 'firebase/firestore'
+>>>>>>> bba55227 (ログが反映されるようになった。空でも送れてしまうのは問題)
 
 type Log = {
   id: string
@@ -18,6 +24,7 @@ type Log = {
   createdAt: any
 }
 
+<<<<<<< HEAD
 type Props = {
   reloadTrigger?: boolean
 }
@@ -34,6 +41,18 @@ export default function LogList({ reloadTrigger }: Props) {
       const q = query(
         collection(db, 'logs'),
         where('uid', '==', auth.currentUser.uid),
+=======
+export default function LogList() {
+  const [logs, setLogs] = useState<Log[]>([])
+
+  useEffect(() => {
+    if (!auth.currentUser) return
+
+    const fetchLogs = async () => {
+      const q = query(
+        collection(db, 'logs'),
+        where('uid', '==', auth.currentUser?.uid),
+>>>>>>> bba55227 (ログが反映されるようになった。空でも送れてしまうのは問題)
         orderBy('createdAt', 'desc')
       )
       const snapshot = await getDocs(q)
@@ -41,6 +60,7 @@ export default function LogList({ reloadTrigger }: Props) {
     }
 
     fetchLogs()
+<<<<<<< HEAD
   }, [reloadTrigger, auth.currentUser])
 
   const deleteLog = async (id: string) => {
@@ -122,6 +142,21 @@ export default function LogList({ reloadTrigger }: Props) {
                 <button onClick={() => deleteLog(log.id)}>削除</button>
               </>
             )}
+=======
+  }, [auth.currentUser])
+
+  return (
+    <div>
+      <h3>あなたの培養ログ</h3>
+      <ul>
+        {logs.map((log) => (
+          <li key={log.id}>
+            {log.imageUrl && (
+              <img src={log.imageUrl} alt="培養写真" width="150" />
+            )}
+            <p>{log.note}</p>
+            <p>{log.createdAt?.toDate().toLocaleString() ?? ''}</p>
+>>>>>>> bba55227 (ログが反映されるようになった。空でも送れてしまうのは問題)
           </li>
         ))}
       </ul>
