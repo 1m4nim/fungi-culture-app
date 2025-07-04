@@ -16,7 +16,6 @@ export default function App() {
         <>
           <p>こんにちは {user.displayName} さん</p>
           <LogForm />
-          <LogList />
         </>
       )}
     </div>
