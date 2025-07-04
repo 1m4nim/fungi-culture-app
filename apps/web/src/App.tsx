@@ -1,9 +1,3 @@
-<<<<<<< HEAD
-import React from 'react'
-
-export default function App() {
-  return <h1>Hello, Fungi Culture App!</h1>
-=======
 import LoginButton from './components/LoginButton'
 import LogForm from './components/LogForm'
 import LogList from './components/LogList'
@@ -27,5 +21,5 @@ export default function App() {
       )}
     </div>
   )
->>>>>>> bba55227 (ログが反映されるようになった。空でも送れてしまうのは問題)
+
 }
