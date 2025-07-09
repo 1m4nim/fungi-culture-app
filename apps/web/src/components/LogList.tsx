@@ -28,20 +28,4 @@ export default function LogList() {
     fetchLogs()
   }, [auth.currentUser])
 
-
- 
-return (
-    <div>
-      <h3>あなたの培養ログ</h3>
-      <ul>
-        {logs.map((log) => (
-          <li key={log.id}>
-            {log.imageUrl && <img src={log.imageUrl} width="150" />}
-            <p>{log.note}</p>
-            <p>{log.createdAt?.toDate().toLocaleString()}</p>
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
 }

@@ -2,8 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthState } from 'react-firebase-hooks/auth'
 import { auth } from './firebase'
 import LoginPage from './pages/LoginPage'
-import LogForm from './components/LogForm'
-import LogList from './components/LogList'
+import HomePage from './pages/HomePage'
 
 export default function App() {
   const [user, loading] = useAuthState(auth)
@@ -13,13 +12,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* "/" はログインページに */}
         <Route path="/" element={!user ? <LoginPage /> : <Navigate to="/home" />} />
-
-        {/* "/home" にログイン後アクセス可能 */}
-
-        <Route path='/home' element={user?<LogForm/>:<Navigate to="/" />}/>
-        <Route path="/home" element={user ? <LogList /> : <Navigate to="/" />} />
+        <Route path="/home" element={user ? <HomePage /> : <Navigate to="/" />} />
       </Routes>
     </BrowserRouter>
   )
