@@ -1,20 +1,24 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useAuthState } from 'react-firebase-hooks/auth'
+import LoginButton from './components/LoginButton'
+import LogForm from './components/LogForm'
+import LogList from './components/LogList'
 import { auth } from './firebase'
-import LoginPage from './pages/LoginPage'
-import HomePage from './pages/HomePage'
+import { useAuthState } from 'react-firebase-hooks/auth'
 
 export default function App() {
-  const [user, loading] = useAuthState(auth)
-
-  if (loading) return <p>読み込み中...</p>
+  const [user] = useAuthState(auth)
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={!user ? <LoginPage /> : <Navigate to="/home" />} />
-        <Route path="/home" element={user ? <HomePage /> : <Navigate to="/" />} />
-      </Routes>
-    </BrowserRouter>
+    <div>
+      <h1>菌類培養ログアプリ</h1>
+      {!user ? (
+        <LoginButton />
+      ) : (
+        <>
+          <p>こんにちは {user.displayName} さん</p>
+          <LogForm />
+          <LogList />
+        </>
+      )}
+    </div>
   )
 }
