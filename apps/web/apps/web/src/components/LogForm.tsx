@@ -11,20 +11,14 @@ import {
   where,
   orderBy,
 } from 'firebase/firestore'
-import {
-  getStorage,
-  ref,
-  uploadBytes,
-  getDownloadURL,
-  deleteObject,
-} from 'firebase/storage'
 import { db, auth } from '../firebase'
 
 type Log = {
   id: string
   uid: string
   note: string
-  imageUrl?: string
+  imageDataUrl?: string
+  imageName?: string
   createdAt: Timestamp
 }
 
@@ -35,15 +29,12 @@ export default function LogForm() {
   const [logs, setLogs] = useState<Log[]>([])
   const [loading, setLoading] = useState(false)
 
-  // 編集用モーダル管理
   const [editingLog, setEditingLog] = useState<Log | null>(null)
   const [editNote, setEditNote] = useState('')
   const [editFile, setEditFile] = useState<File | null>(null)
   const [editPreview, setEditPreview] = useState<string | null>(null)
 
-  const storage = getStorage()
-
-  // プレビュー画像生成・破棄（新規用）
+  // 新規ファイルプレビュー
   useEffect(() => {
     if (!file) {
       setPreview(null)
@@ -54,10 +45,10 @@ export default function LogForm() {
     return () => URL.revokeObjectURL(objectUrl)
   }, [file])
 
-  // プレビュー画像生成・破棄（編集用）
+  // 編集ファイルプレビュー
   useEffect(() => {
     if (!editFile) {
-      setEditPreview(editingLog ? editingLog.imageUrl || null : null)
+      setEditPreview(editingLog ? editingLog.imageDataUrl || null : null)
       return
     }
     const objectUrl = URL.createObjectURL(editFile)
@@ -65,14 +56,15 @@ export default function LogForm() {
     return () => URL.revokeObjectURL(objectUrl)
   }, [editFile, editingLog])
 
-  // ログ一覧取得
+  // Firestoreからログ取得
   useEffect(() => {
-    if (!auth.currentUser) return
+    const user = auth.currentUser
+    if (!user) return
 
     const fetchLogs = async () => {
       const q = query(
         collection(db, 'logs'),
-        where('uid', '==', auth.currentUser.uid),
+        where('uid', '==', user.uid),
         orderBy('createdAt', 'desc')
       )
       const snapshot = await getDocs(q)
@@ -82,6 +74,7 @@ export default function LogForm() {
       }))
       setLogs(data)
     }
+
     fetchLogs()
   }, [auth.currentUser])
 
@@ -91,10 +84,37 @@ export default function LogForm() {
     setPreview(null)
   }
 
-  // 新規作成フォーム送信
+  // FileをBase64に変換
+  const fileToDataUrl = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        if (typeof reader.result === 'string') resolve(reader.result)
+        else reject(new Error('読み込みエラー'))
+      }
+      reader.onerror = () => reject(new Error('読み込みエラー'))
+      reader.readAsDataURL(file)
+    })
+  }
+
+  // ファイル名生成 (例: 20250710_092530_a1b2c3d4)
+  const generateImageName = () => {
+    const now = new Date()
+    const y = now.getFullYear().toString()
+    const m = (now.getMonth() + 1).toString().padStart(2, '0')
+    const d = now.getDate().toString().padStart(2, '0')
+    const hh = now.getHours().toString().padStart(2, '0')
+    const mm = now.getMinutes().toString().padStart(2, '0')
+    const ss = now.getSeconds().toString().padStart(2, '0')
+    const randomStr = Math.random().toString(36).slice(2, 10)
+    return `${y}${m}${d}_${hh}${mm}${ss}_${randomStr}`
+  }
+
+  // 新規ログ保存
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!auth.currentUser) {
+    const user = auth.currentUser
+    if (!user) {
       alert('ログインしてください')
       return
     }
@@ -104,23 +124,20 @@ export default function LogForm() {
     }
 
     setLoading(true)
-
     try {
-      let imageUrl = ''
+      let imageDataUrl = ''
+      let imageName = ''
 
       if (file) {
-        const storageRef = ref(
-          storage,
-          `images/${auth.currentUser.uid}/${Date.now()}_${file.name}`
-        )
-        await uploadBytes(storageRef, file)
-        imageUrl = await getDownloadURL(storageRef)
+        imageDataUrl = await fileToDataUrl(file)
+        imageName = generateImageName()
       }
 
       await addDoc(collection(db, 'logs'), {
-        uid: auth.currentUser.uid,
+        uid: user.uid,
         note,
-        imageUrl,
+        imageDataUrl,
+        imageName,
         createdAt: Timestamp.now(),
       })
 
@@ -128,18 +145,20 @@ export default function LogForm() {
       await reloadLogs()
       resetForm()
     } catch (error) {
-      console.error('アップロードに失敗しました', error)
-      alert('アップロード中にエラーが発生しました')
+      console.error('保存に失敗しました', error)
+      alert('エラーが発生しました')
     }
     setLoading(false)
   }
 
-  // ログ一覧再取得関数
+  // ログ再読み込み
   const reloadLogs = async () => {
-    if (!auth.currentUser) return
+    const user = auth.currentUser
+    if (!user) return
+
     const q = query(
       collection(db, 'logs'),
-      where('uid', '==', auth.currentUser.uid),
+      where('uid', '==', user.uid),
       orderBy('createdAt', 'desc')
     )
     const snapshot = await getDocs(q)
@@ -155,10 +174,9 @@ export default function LogForm() {
     setEditingLog(log)
     setEditNote(log.note)
     setEditFile(null)
-    setEditPreview(log.imageUrl || null)
+    setEditPreview(log.imageDataUrl || null)
   }
 
-  // 編集モーダル閉じる
   const closeEditModal = () => {
     setEditingLog(null)
     setEditNote('')
@@ -166,9 +184,14 @@ export default function LogForm() {
     setEditPreview(null)
   }
 
-  // 編集モーダル保存
+  // 編集内容保存
   const handleEditSave = async () => {
     if (!editingLog) return
+    const user = auth.currentUser
+    if (!user) {
+      alert('ログインしてください')
+      return
+    }
     if (editNote.trim() === '') {
       alert('培養メモを入力してください')
       return
@@ -176,32 +199,19 @@ export default function LogForm() {
 
     setLoading(true)
     try {
-      let imageUrl = editingLog.imageUrl || ''
+      let imageDataUrl = editingLog.imageDataUrl || ''
+      let imageName = editingLog.imageName || ''
 
       if (editFile) {
-        // 新規画像アップロード
-        const storageRef = ref(
-          storage,
-          `images/${auth.currentUser!.uid}/${Date.now()}_${editFile.name}`
-        )
-        await uploadBytes(storageRef, editFile)
-        imageUrl = await getDownloadURL(storageRef)
-
-        // 古い画像削除（あれば）
-        if (editingLog.imageUrl) {
-          try {
-            const oldRef = ref(storage, editingLog.imageUrl)
-            await deleteObject(oldRef)
-          } catch {
-            // 削除失敗は無視
-          }
-        }
+        imageDataUrl = await fileToDataUrl(editFile)
+        imageName = generateImageName()
       }
 
       const logDoc = doc(db, 'logs', editingLog.id)
       await updateDoc(logDoc, {
         note: editNote,
-        imageUrl,
+        imageDataUrl,
+        imageName,
       })
 
       alert('更新しました')
@@ -209,36 +219,27 @@ export default function LogForm() {
       closeEditModal()
     } catch (error) {
       console.error('更新に失敗しました', error)
-      alert('更新中にエラーが発生しました')
+      alert('エラーが発生しました')
     }
     setLoading(false)
   }
 
-  // 削除処理
+  // ログ削除
   const handleDelete = async (log: Log) => {
     if (!window.confirm('本当に削除しますか？')) return
     try {
       await deleteDoc(doc(db, 'logs', log.id))
-      if (log.imageUrl) {
-        try {
-          const imageRef = ref(storage, log.imageUrl)
-          await deleteObject(imageRef)
-        } catch {
-          // 削除失敗は無視
-        }
-      }
       setLogs((prev) => prev.filter((l) => l.id !== log.id))
       if (editingLog?.id === log.id) closeEditModal()
       alert('削除しました')
     } catch (error) {
       console.error('削除に失敗しました', error)
-      alert('削除中にエラーが発生しました')
+      alert('エラーが発生しました')
     }
   }
 
   return (
     <>
-      {/* 新規作成フォーム */}
       <form onSubmit={handleUpload}>
         <h2>培養メモを記録</h2>
         <textarea
@@ -280,7 +281,6 @@ export default function LogForm() {
 
       <hr />
 
-      {/* ログ一覧 */}
       <h2>過去のログ一覧</h2>
       {logs.length === 0 && <p>ログがありません</p>}
       <ul style={{ listStyle: 'none', paddingLeft: 0 }}>
@@ -294,10 +294,10 @@ export default function LogForm() {
             }}
           >
             <p>{log.note}</p>
-            {log.imageUrl && (
+            {log.imageDataUrl && (
               <img
-                src={log.imageUrl}
-                alt="log image"
+                src={log.imageDataUrl}
+                alt={log.imageName || 'log image'}
                 style={{ maxWidth: 200, borderRadius: '8px' }}
               />
             )}
@@ -322,10 +322,8 @@ export default function LogForm() {
         ))}
       </ul>
 
-      {/* 編集モーダル */}
       {editingLog && (
         <>
-          {/* オーバーレイ */}
           <div
             style={{
               position: 'fixed',
@@ -338,7 +336,6 @@ export default function LogForm() {
             }}
             onClick={closeEditModal}
           />
-          {/* モーダル本体 */}
           <div
             style={{
               position: 'fixed',
