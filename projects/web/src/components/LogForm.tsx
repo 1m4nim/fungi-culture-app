@@ -6,66 +6,105 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  updateDoc,
+  doc,
 } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { db, storage } from '../firebase' // Firebase初期化済みのdb, storageをimport
-import ExperimentForm from './ExperimentForm' // ExperimentFormのパスに合わせて調整してください
+import { db, storage } from '../firebase'
 
 type Log = {
   id: string
   note: string
   imageUrl: string
   createdAt: any
+  tags: string[]
+  category?: string
 }
+
+const CATEGORY_OPTIONS = ['菌株', '培地', 'PCR', '観察', 'その他']
 
 export default function LogForm() {
   const [logs, setLogs] = useState<Log[]>([])
+  const [filteredLogs, setFilteredLogs] = useState<Log[]>([])
+  const [searchTag, setSearchTag] = useState('')
+
+  const [showNewModal, setShowNewModal] = useState(false)
   const [note, setNote] = useState('')
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [showExperimentForm, setShowExperimentForm] = useState(false)
+  const [newTags, setNewTags] = useState('')
+  const [newCategory, setNewCategory] = useState('')
 
-  // Firestoreからログ一覧取得
+  const [editingLog, setEditingLog] = useState<Log | null>(null)
+  const [editNote, setEditNote] = useState('')
+  const [editTags, setEditTags] = useState('')
+  const [editCategory, setEditCategory] = useState('')
+  const [editImageFile, setEditImageFile] = useState<File | null>(null)
+  const [editImagePreview, setEditImagePreview] = useState('')
+
+  const [loading, setLoading] = useState(false)
+
   const reloadLogs = async () => {
     const q = query(collection(db, 'logs'), orderBy('createdAt', 'desc'))
     const snapshot = await getDocs(q)
-    const loadedLogs: Log[] = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as Log[]
+    const loadedLogs: Log[] = snapshot.docs.map((doc) => {
+      const data = doc.data()
+      return {
+        id: doc.id,
+        note: data.note ?? '',
+        imageUrl: data.imageUrl ?? '',
+        createdAt: data.createdAt,
+        tags: (data.tags ?? []) as string[],
+        category: data.category ?? '',
+      }
+    })
     setLogs(loadedLogs)
+    filterLogs(searchTag, loadedLogs)
   }
 
   useEffect(() => {
     reloadLogs()
   }, [])
 
-  // ファイル選択時の処理
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null
-    setImageFile(file)
+  const filterLogs = (keyword: string, sourceLogs?: Log[]) => {
+    const baseLogs = sourceLogs ?? logs
+    if (keyword.trim() === '') {
+      setFilteredLogs(baseLogs)
+      return
+    }
+    const filtered = baseLogs.filter(
+      (log) =>
+        log.tags.some((tag) => tag.includes(keyword.trim())) ||
+        (log.category?.includes(keyword.trim()) ?? false)
+    )
+    setFilteredLogs(filtered)
+  }
 
+  const handleSearchTagChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    setSearchTag(val)
+    filterLogs(val)
+  }
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null
+    setImageFile(file)
     if (file) {
       const reader = new FileReader()
-      reader.onloadend = () => {
-        if (reader.result) setImagePreview(reader.result as string)
-      }
+      reader.onloadend = () => setImagePreview(reader.result as string)
       reader.readAsDataURL(file)
     } else {
       setImagePreview('')
     }
   }
 
-  // フォーム送信処理
   const handleUpload = async (e: FormEvent) => {
     e.preventDefault()
-    if (!note) {
+    if (!note.trim()) {
       alert('メモを入力してください')
       return
     }
     setLoading(true)
-
     try {
       let uploadedImageUrl = ''
       if (imageFile) {
@@ -78,35 +117,99 @@ export default function LogForm() {
         note,
         imageUrl: uploadedImageUrl,
         createdAt: serverTimestamp(),
+        tags: newTags
+          .split(',')
+          .map((t) => t.trim())
+          .filter((t) => t !== ''),
+        category: newCategory.trim(),
       })
 
-      // フォーム初期化
       setNote('')
       setImageFile(null)
       setImagePreview('')
-
-      // 再読み込み
-      reloadLogs()
+      setNewTags('')
+      setNewCategory('')
+      setShowNewModal(false)
+      await reloadLogs()
     } catch (error) {
       console.error(error)
-      alert('送信中にエラーが発生しました')
+      alert('送信に失敗しました')
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
-  // ExperimentFormで新規作成完了した時の処理
-  const handleExperimentComplete = async () => {
-    setShowExperimentForm(false)
-    await reloadLogs()
+  const startEdit = (log: Log) => {
+    setEditingLog(log)
+    setEditNote(log.note)
+    setEditTags(log.tags.join(', '))
+    setEditCategory(log.category ?? '')
+    setEditImagePreview(log.imageUrl)
+    setEditImageFile(null)
+  }
+
+  const handleEditFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null
+    setEditImageFile(file)
+    if (file) {
+      const reader = new FileReader()
+      reader.onloadend = () => setEditImagePreview(reader.result as string)
+      reader.readAsDataURL(file)
+    } else {
+      setEditImagePreview(editingLog?.imageUrl ?? '')
+    }
+  }
+
+  const handleEditSave = async () => {
+    if (!editingLog) return
+    if (!editNote.trim()) {
+      alert('メモは必須です')
+      return
+    }
+    setLoading(true)
+    try {
+      let uploadedImageUrl = editingLog.imageUrl
+      if (editImageFile) {
+        const storageRef = ref(storage, `images/${Date.now()}_${editImageFile.name}`)
+        await uploadBytes(storageRef, editImageFile)
+        uploadedImageUrl = await getDownloadURL(storageRef)
+      }
+      const docRef = doc(db, 'logs', editingLog.id)
+      await updateDoc(docRef, {
+        note: editNote,
+        imageUrl: uploadedImageUrl,
+        tags: editTags
+          .split(',')
+          .map((t) => t.trim())
+          .filter((t) => t !== ''),
+        category: editCategory.trim(),
+      })
+      await reloadLogs()
+      setEditingLog(null)
+    } catch (error) {
+      console.error(error)
+      alert('更新に失敗しました')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const cancelEdit = () => setEditingLog(null)
+
+  const cancelNew = () => {
+    setShowNewModal(false)
+    setNote('')
+    setImageFile(null)
+    setImagePreview('')
+    setNewTags('')
+    setNewCategory('')
   }
 
   return (
     <div style={{ maxWidth: 600, margin: 'auto', padding: 20 }}>
-      {/* + 実験追加ボタン */}
       <button
         type="button"
-        onClick={() => setShowExperimentForm(true)}
+        onClick={() => setShowNewModal(true)}
         style={{
           marginBottom: 20,
           padding: '8px 12px',
@@ -120,23 +223,18 @@ export default function LogForm() {
         ＋ 新しい実験を追加（カテゴリ・タグなど）
       </button>
 
-      {/* モーダル表示 */}
-      {showExperimentForm && (
+      {/* 新規モーダル */}
+      {showNewModal && (
         <>
-          {/* 背景の半透明オーバーレイ */}
           <div
-            onClick={() => setShowExperimentForm(false)}
+            onClick={cancelNew}
             style={{
               position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
+              inset: 0,
               backgroundColor: 'rgba(0,0,0,0.5)',
               zIndex: 999,
             }}
           />
-          {/* モーダル本体 */}
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
@@ -152,94 +250,233 @@ export default function LogForm() {
               maxWidth: 500,
             }}
           >
-            <ExperimentForm onComplete={handleExperimentComplete} />
-            <button
-              onClick={() => setShowExperimentForm(false)}
-              style={{
-                marginTop: 10,
-                padding: '6px 12px',
-                borderRadius: 4,
-                border: '1px solid #ccc',
-                backgroundColor: '#f0f0f0',
-                cursor: 'pointer',
-              }}
-            >
-              閉じる
-            </button>
+            <h3>新しい実験を追加</h3>
+            <form onSubmit={handleUpload}>
+              <textarea
+                placeholder="メモを入力"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={4}
+                style={{ width: '100%', marginBottom: 12, padding: 8 }}
+              />
+              <input
+                type="text"
+                placeholder="タグ（カンマ区切り）"
+                value={newTags}
+                onChange={(e) => setNewTags(e.target.value)}
+                style={{ width: '100%', marginBottom: 12 }}
+              />
+              <select
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+                style={{ width: '100%', marginBottom: 12, padding: 8 }}
+              >
+                <option value="">カテゴリを選択</option>
+                {CATEGORY_OPTIONS.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                style={{ marginBottom: 12 }}
+              />
+              {imagePreview && (
+                <img
+                  src={imagePreview}
+                  alt="プレビュー"
+                  style={{ maxWidth: '100%', marginBottom: 12, borderRadius: 4 }}
+                />
+              )}
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  backgroundColor: '#4caf50',
+                  color: 'white',
+                  padding: '8px 16px',
+                  border: 'none',
+                  borderRadius: 4,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  marginRight: 8,
+                }}
+              >
+                {loading ? '送信中...' : '送信'}
+              </button>
+              <button
+                type="button"
+                onClick={cancelNew}
+                disabled={loading}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 4,
+                  border: '1px solid #ccc',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                }}
+              >
+                キャンセル
+              </button>
+            </form>
           </div>
         </>
       )}
 
-      {/* 既存のログ登録フォーム */}
-      <form onSubmit={handleUpload} style={{ marginBottom: 40 }}>
-        <textarea
-          placeholder="メモを入力"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          rows={4}
-          style={{ width: '100%', marginBottom: 12, padding: 8 }}
-          disabled={loading}
-        />
-
+      {/* 検索 */}
+      <div style={{ marginBottom: 20 }}>
         <input
-          type="file"
-          accept="image/*"
-          onChange={handleFileChange}
-          disabled={loading}
-          style={{ marginBottom: 12 }}
+          type="text"
+          placeholder="タグ・カテゴリで検索"
+          value={searchTag}
+          onChange={handleSearchTagChange}
+          style={{ padding: 8, width: '60%' }}
         />
+      </div>
 
-        {imagePreview && (
-          <img
-            src={imagePreview}
-            alt="プレビュー"
-            style={{ maxWidth: '100%', marginBottom: 12, borderRadius: 4 }}
-          />
-        )}
-
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            backgroundColor: '#4caf50',
-            color: 'white',
-            padding: '8px 16px',
-            border: 'none',
-            borderRadius: 4,
-            cursor: 'pointer',
-          }}
-        >
-          {loading ? '送信中...' : '送信'}
-        </button>
-      </form>
-
-      {/* 過去のログ一覧 */}
+      {/* ログ一覧 */}
       <h2>過去のログ一覧</h2>
-      <ul style={{ listStyle: 'none', padding: 0 }}>
-        {logs.map((log) => (
-          <li
-            key={log.id}
+      {filteredLogs.length === 0 ? (
+        <p>該当するログはありません。</p>
+      ) : (
+        <ul style={{ listStyle: 'none', padding: 0 }}>
+          {filteredLogs.map((log) => (
+            <li key={log.id} style={{ padding: '8px 0' }}>
+              <p><strong>カテゴリ:</strong> {log.category || '-'}</p>
+              <p>{log.note}</p>
+              {log.imageUrl && (
+                <img
+                  src={log.imageUrl}
+                  alt="log"
+                  style={{ maxWidth: '100%', borderRadius: 4 }}
+                />
+              )}
+              <p>
+                <strong>タグ:</strong> {log.tags.length > 0 ? log.tags.join(', ') : '-'}
+              </p>
+              <small>
+                {log.createdAt?.toDate ? log.createdAt.toDate().toLocaleString() : ''}
+              </small>
+              <br />
+              <button
+                onClick={() => startEdit(log)}
+                style={{
+                  marginTop: 8,
+                  padding: '6px 12px',
+                  borderRadius: 4,
+                  border: '1px solid #1976d2',
+                  backgroundColor: 'white',
+                  color: '#1976d2',
+                  cursor: 'pointer',
+                }}
+              >
+                編集
+              </button>
+              <hr style={{ marginTop: 16, borderColor: '#ddd' }} />
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* 編集モーダル */}
+      {editingLog && (
+        <>
+          <div
+            onClick={cancelEdit}
             style={{
-              borderBottom: '1px solid #ddd',
-              padding: '8px 0',
+              position: 'fixed',
+              inset: 0,
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              zIndex: 999,
+            }}
+          />
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'fixed',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              backgroundColor: 'white',
+              padding: 20,
+              borderRadius: 8,
+              zIndex: 1000,
+              width: '90%',
+              maxWidth: 500,
+              maxHeight: '60vh',
+              overflowY: 'auto',
             }}
           >
-            <p>{log.note}</p>
-            {log.imageUrl && (
+            <h3>投稿を編集</h3>
+            <textarea
+              value={editNote}
+              onChange={(e) => setEditNote(e.target.value)}
+              rows={4}
+              style={{ width: '100%', marginBottom: 12, padding: 8 }}
+            />
+            <input
+              type="text"
+              placeholder="タグ（カンマ区切り）"
+              value={editTags}
+              onChange={(e) => setEditTags(e.target.value)}
+              style={{ width: '100%', marginBottom: 12 }}
+            />
+            <select
+              value={editCategory}
+              onChange={(e) => setEditCategory(e.target.value)}
+              style={{ width: '100%', marginBottom: 12, padding: 8 }}
+            >
+              <option value="">カテゴリを選択</option>
+              {CATEGORY_OPTIONS.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleEditFileChange}
+              style={{ marginBottom: 12 }}
+            />
+            {editImagePreview && (
               <img
-                src={log.imageUrl}
-                alt="log image"
-                style={{ maxWidth: '100%', borderRadius: 4 }}
+                src={editImagePreview}
+                alt="編集プレビュー"
+                style={{ maxWidth: '100%', marginBottom: 12, borderRadius: 4 }}
               />
             )}
-            <small>
-              {log.createdAt?.toDate
-                ? log.createdAt.toDate().toLocaleString()
-                : ''}
-            </small>
-          </li>
-        ))}
-      </ul>
+            <button
+              onClick={handleEditSave}
+              disabled={loading}
+              style={{
+                backgroundColor: '#1976d2',
+                color: 'white',
+                padding: '8px 16px',
+                border: 'none',
+                borderRadius: 4,
+                cursor: loading ? 'not-allowed' : 'pointer',
+                marginRight: 8,
+              }}
+            >
+              {loading ? '保存中...' : '保存'}
+            </button>
+            <button
+              onClick={cancelEdit}
+              disabled={loading}
+              style={{
+                padding: '8px 16px',
+                borderRadius: 4,
+                border: '1px solid #ccc',
+                cursor: loading ? 'not-allowed' : 'pointer',
+              }}
+            >
+              キャンセル
+            </button>
+          </div>
+        </>
+      )}
     </div>
   )
 }
