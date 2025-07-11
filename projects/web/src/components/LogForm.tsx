@@ -8,12 +8,15 @@ import {
   serverTimestamp,
   updateDoc,
   doc,
+  where,
 } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { db, storage } from '../firebase'
+import { User } from 'firebase/auth'
 
 type Log = {
   id: string
+  uid: string
   note: string
   imageUrl: string
   createdAt: any
@@ -21,9 +24,13 @@ type Log = {
   category?: string
 }
 
+type LogFormProps = {
+  currentUser: User
+}
+
 const CATEGORY_OPTIONS = ['菌株', '培地', 'PCR', '観察', 'その他']
 
-export default function LogForm() {
+export default function LogForm({ currentUser }: LogFormProps) {
   const [logs, setLogs] = useState<Log[]>([])
   const [filteredLogs, setFilteredLogs] = useState<Log[]>([])
   const [searchTag, setSearchTag] = useState('')
@@ -45,12 +52,17 @@ export default function LogForm() {
   const [loading, setLoading] = useState(false)
 
   const reloadLogs = async () => {
-    const q = query(collection(db, 'logs'), orderBy('createdAt', 'desc'))
+    const q = query(
+      collection(db, 'logs'),
+      where('uid', '==', currentUser.uid),
+      orderBy('createdAt', 'desc')
+    )
     const snapshot = await getDocs(q)
     const loadedLogs: Log[] = snapshot.docs.map((doc) => {
       const data = doc.data()
       return {
         id: doc.id,
+        uid: data.uid,
         note: data.note ?? '',
         imageUrl: data.imageUrl ?? '',
         createdAt: data.createdAt,
@@ -64,7 +76,8 @@ export default function LogForm() {
 
   useEffect(() => {
     reloadLogs()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser])
 
   const filterLogs = (keyword: string, sourceLogs?: Log[]) => {
     const baseLogs = sourceLogs ?? logs
@@ -114,6 +127,7 @@ export default function LogForm() {
       }
 
       await addDoc(collection(db, 'logs'), {
+        uid: currentUser.uid,
         note,
         imageUrl: uploadedImageUrl,
         createdAt: serverTimestamp(),
@@ -161,39 +175,53 @@ export default function LogForm() {
   }
 
   const handleEditSave = async () => {
-    if (!editingLog) return
-    if (!editNote.trim()) {
-      alert('メモは必須です')
-      return
-    }
-    setLoading(true)
-    try {
-      let uploadedImageUrl = editingLog.imageUrl
-      if (editImageFile) {
+  if (!editingLog) return
+  if (!editNote.trim()) {
+    alert('メモは必須です')
+    return
+  }
+
+  setLoading(true)
+
+  try {
+    let uploadedImageUrl = editingLog.imageUrl
+
+    // 画像ファイルが新しく設定されている場合だけアップロード
+    if (editImageFile) {
+      try {
         const storageRef = ref(storage, `images/${Date.now()}_${editImageFile.name}`)
         await uploadBytes(storageRef, editImageFile)
         uploadedImageUrl = await getDownloadURL(storageRef)
+      } catch (uploadError) {
+        console.error('画像のアップロードまたは取得に失敗しました:', uploadError)
+        alert('画像のアップロードまたは取得に失敗しました。CORS 設定などを確認してください。')
+        return
       }
-      const docRef = doc(db, 'logs', editingLog.id)
-      await updateDoc(docRef, {
-        note: editNote,
-        imageUrl: uploadedImageUrl,
-        tags: editTags
-          .split(',')
-          .map((t) => t.trim())
-          .filter((t) => t !== ''),
-        category: editCategory.trim(),
-      })
-      await reloadLogs()
-      setEditingLog(null)
-    } catch (error) {
-      console.error(error)
-      alert('更新に失敗しました')
-    } finally {
-      setLoading(false)
     }
-  }
 
+    const docRef = doc(db, 'logs', editingLog.id)
+
+    await updateDoc(docRef, {
+      note: editNote,
+      imageUrl: uploadedImageUrl,
+      tags: editTags
+        .split(',')
+        .map((t) => t.trim())
+        .filter((t) => t !== ''),
+      category: editCategory.trim(),
+    })
+
+    await reloadLogs()
+    setEditingLog(null)
+  } catch (error) {
+    console.error('保存エラー:', error)
+    alert('更新に失敗しました。もう一度お試しください。')
+  } finally {
+    setLoading(false)
+  }
+}
+
+    
   const cancelEdit = () => setEditingLog(null)
 
   const cancelNew = () => {
@@ -223,33 +251,37 @@ export default function LogForm() {
         ＋ 新しい実験を追加（カテゴリ・タグなど）
       </button>
 
-      {/* 新規モーダル */}
       {showNewModal && (
-        <>
-          <div
-            onClick={cancelNew}
-            style={{
-              position: 'fixed',
-              inset: 0,
-              backgroundColor: 'rgba(0,0,0,0.5)',
-              zIndex: 999,
-            }}
-          />
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              position: 'fixed',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              backgroundColor: 'white',
-              padding: 20,
-              borderRadius: 8,
-              zIndex: 1000,
-              width: '90%',
-              maxWidth: 500,
-            }}
-          >
+  <>
+    <div
+      onClick={cancelNew}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        zIndex: 999,
+      }}
+    />
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        position: 'fixed',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        backgroundColor: 'white',
+        padding: 20,
+        borderRadius: 8,
+        zIndex: 1000,
+        width: '90%',
+        maxWidth: 500,
+        maxHeight: '80vh',     // ここを追加
+        overflowY: 'auto',    // ここを追加
+        boxSizing: 'border-box',
+      }}
+    >
+
+
             <h3>新しい実験を追加</h3>
             <form onSubmit={handleUpload}>
               <textarea
@@ -392,22 +424,24 @@ export default function LogForm() {
             }}
           />
           <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              position: 'fixed',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              backgroundColor: 'white',
-              padding: 20,
-              borderRadius: 8,
-              zIndex: 1000,
-              width: '90%',
-              maxWidth: 500,
-              maxHeight: '60vh',
-              overflowY: 'auto',
-            }}
-          >
+  onClick={(e) => e.stopPropagation()}
+  style={{
+    position: 'fixed',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 8,
+    zIndex: 1000,
+    width: '90%',
+    maxWidth: 500,
+    maxHeight: '80vh', // モーダルの高さ上限
+    overflowY: 'auto', // モーダル内スクロール
+    boxSizing: 'border-box',
+  }}
+>
+
             <h3>投稿を編集</h3>
             <textarea
               value={editNote}

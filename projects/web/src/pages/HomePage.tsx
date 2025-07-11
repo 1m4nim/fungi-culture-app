@@ -1,22 +1,15 @@
-import { signOut, onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
+import { signOut, onAuthStateChanged, User, signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
 import { auth } from '../firebase'
 import LogForm from '../components/LogForm'
 import { useEffect, useState } from 'react'
 
 export default function HomePage() {
-  const [userName, setUserName] = useState<string | null>(null)
-  const [user, setUser] = useState(null)
+  const [user, setUser] = useState<User | null>(null)
   const provider = new GoogleAuthProvider()
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        setUserName(user.displayName)
-        setUser(user)
-      } else {
-        setUserName(null)
-        setUser(null)
-      }
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser)
     })
     return () => unsubscribe()
   }, [])
@@ -24,8 +17,8 @@ export default function HomePage() {
   const handleGoogleLogin = async () => {
     try {
       await signInWithPopup(auth, provider)
-      // ログイン成功後はonAuthStateChangedが呼ばれるのでuserがセットされる
     } catch (error) {
+      console.error('Googleログインに失敗しました', error)
       alert('Googleログインに失敗しました。')
     }
   }
@@ -54,7 +47,7 @@ export default function HomePage() {
 
   return (
     <div style={{ maxWidth: 600, margin: 'auto', padding: 20 }}>
-      <h2>ようこそ！{userName} さん</h2>
+      <h2>ようこそ！{user.displayName || user.email} さん</h2>
       <button
         onClick={() => signOut(auth)}
         style={{
@@ -69,7 +62,8 @@ export default function HomePage() {
       >
         ログアウト
       </button>
-      <LogForm />
+
+      <LogForm currentUser={user} />
     </div>
   )
 }
