@@ -1,5 +1,7 @@
 # 開発ログ（2025年7月3日〜10日）
 
+https://fungi-culture-app.vercel.app/
+
 ## 7月3日（木）
 - Firestore にテキストと画像のログを保存するアプリの開発を開始
 - Firebase プロジェクト作成、Firestore の初期設定
