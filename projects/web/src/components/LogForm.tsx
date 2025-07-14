@@ -38,14 +38,16 @@ export default function LogForm({ currentUser }: LogFormProps) {
 
   const [loading, setLoading] = useState(false)
 
+  const storageKey = `logs_${currentUser.uid}`
+
   useEffect(() => {
-    const saved = localStorage.getItem('logs')
+    const saved = localStorage.getItem(storageKey)
     if (saved) {
       const parsed: Log[] = JSON.parse(saved)
       setLogs(parsed)
       setFilteredLogs(parsed)
     }
-  }, [])
+  }, [storageKey])
 
   const filterLogs = (keyword: string, sourceLogs?: Log[]) => {
     const baseLogs = sourceLogs ?? logs
@@ -116,7 +118,7 @@ export default function LogForm({ currentUser }: LogFormProps) {
         )
         setLogs(updatedLogs)
         filterLogs(searchTag, updatedLogs)
-        localStorage.setItem('logs', JSON.stringify(updatedLogs))
+        localStorage.setItem(storageKey, JSON.stringify(updatedLogs))
       } else {
         const newLog: Log = {
           id: Date.now().toString(),
@@ -130,7 +132,7 @@ export default function LogForm({ currentUser }: LogFormProps) {
         const newLogs = [newLog, ...logs]
         setLogs(newLogs)
         filterLogs(searchTag, newLogs)
-        localStorage.setItem('logs', JSON.stringify(newLogs))
+        localStorage.setItem(storageKey, JSON.stringify(newLogs))
       }
     } finally {
       setLoading(false)
@@ -159,7 +161,7 @@ export default function LogForm({ currentUser }: LogFormProps) {
     const newLogs = logs.filter((log) => log.id !== id)
     setLogs(newLogs)
     filterLogs(searchTag, newLogs)
-    localStorage.setItem('logs', JSON.stringify(newLogs))
+    localStorage.setItem(storageKey, JSON.stringify(newLogs))
   }
 
   const openNewModal = () => {
