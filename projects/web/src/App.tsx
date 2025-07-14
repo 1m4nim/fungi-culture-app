@@ -1,18 +1,24 @@
-// src/App.tsx
-import React from 'react'
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
-import HomePage from './pages/HomePage'
-import LoginPage from './pages/LoginPage'
+import LoginButton from './components/LoginButton'
+import LogForm from './components/LogForm'
+import LogList from './components/LogList'
+import { auth } from './firebase'
+import { useAuthState } from 'react-firebase-hooks/auth'
 
-function App() {
+export default function App() {
+  const [user] = useAuthState(auth)
+
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/login" element={<LoginPage />} />
-      </Routes>
-    </Router>
+    <div>
+      <h1>菌類培養ログアプリ</h1>
+      {!user ? (
+        <LoginButton />
+      ) : (
+        <>
+          <p>こんにちは {user.displayName} さん</p>
+          <LogForm currentUser={{ uid: user.uid }} />
+          <LogList />
+        </>
+      )}
+    </div>
   )
 }
-
-export default App

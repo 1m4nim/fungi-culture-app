@@ -28,4 +28,8 @@ export default function LogList() {
     fetchLogs()
   }, [auth.currentUser])
 
+  return (
+    <div>
+    </div>
+  )
 }
