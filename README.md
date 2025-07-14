@@ -1,5 +1,6 @@
 # 開発ログ（2025年7月3日〜10日）
 
+## アプリ詳細
 https://fungi-culture-app.vercel.app/
 
 ## 7月3日（木）
